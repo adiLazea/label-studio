@@ -117,13 +117,14 @@ ARG SKIP_VERSION_GEN=false
 ARG VERSION_OVERRIDE
 ARG BRANCH_OVERRIDE
 
-# ✅ Updated to avoid crash if .git is missing (for remote builds)
+# ✅ Updated to create a dummy fallback if version generation is skipped or .git is missing
 RUN if [ "$SKIP_VERSION_GEN" != "true" ] && [ -d "./.git" ]; then \
       echo "Running Python version generator..."; \
       VERSION_OVERRIDE=${VERSION_OVERRIDE} BRANCH_OVERRIDE=${BRANCH_OVERRIDE} \
       poetry run python label_studio/core/version.py; \
     else \
-      echo "Skipping Python version generation (SKIP_VERSION_GEN=$SKIP_VERSION_GEN or .git missing)"; \
+      echo "Skipping Python version generation, creating fallback..."; \
+      echo '__version__ = "dev"\n__branch__ = "unknown"\n__hash__ = "none"\n' > label_studio/core/version_.py; \
     fi
 
 ################################### Stage: prod
