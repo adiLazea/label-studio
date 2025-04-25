@@ -82,6 +82,9 @@ from label_studio.core.utils.params import get_bool_env, get_env
 logger = logging.getLogger(__name__)
 SILENCED_SYSTEM_CHECKS = []
 
+KEYCLOAK_ISSUER = f"{get_env('PROTOCOL', 'http')}://{get_env('KEYCLOAK_HOSTNAME', 'keycloak')}:{get_env('KEYCLOAK_PORT', '8000')}/realms/{get_env('KEYCLOAK_REALM', 'custom-realm')}"
+KEYCLOAK_PUBLIC_KEY_URL = f"{KEYCLOAK_ISSUER}/protocol/openid-connect/certs"
+
 # Hostname is used for proper path generation to the resources, pages, etc
 HOSTNAME = get_env('HOST', '')
 if HOSTNAME:
@@ -249,7 +252,7 @@ MIDDLEWARE = [
     'core.middleware.ContextLogMiddleware',
     'core.middleware.DatabaseIsLockedRetryMiddleware',
     'core.current_request.ThreadLocalMiddleware',
-    'jwt_auth.middleware.JWTAuthenticationMiddleware',
+    'label_studio.zetta_middleware.sso_auth_middleware.SSOMiddleware',
 ]
 
 REST_FRAMEWORK = {

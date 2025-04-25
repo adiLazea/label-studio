@@ -129,6 +129,9 @@ ENV LS_DIR=/label-studio \
 
 WORKDIR $LS_DIR
 
+# Ensure the /label_studio/data directory has the correct permissions during build
+RUN chmod -R 777 $LABEL_STUDIO_BASE_DATA_DIR || true
+
 # install prerequisites for app
 RUN --mount=type=cache,target="/var/cache/apt",sharing=locked \
     --mount=type=cache,target="/var/lib/apt/lists",sharing=locked \
@@ -138,24 +141,6 @@ RUN --mount=type=cache,target="/var/cache/apt",sharing=locked \
     apt-get install --no-install-recommends -y libexpat1 libgl1-mesa-glx libglib2.0-0 \
         gnupg2 curl; \
     apt-get autoremove -y
-
-# install nginx
-RUN --mount=type=cache,target="/var/cache/apt",sharing=locked \
-    --mount=type=cache,target="/var/lib/apt/lists",sharing=locked \
-    set -eux; \
-    curl -sSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor -o /etc/apt/keyrings/nginx-archive-keyring.gpg >/dev/null; \
-    DEBIAN_VERSION=$(awk -F '=' '/^VERSION_CODENAME=/ {print $2}' /etc/os-release); \
-    printf "deb [signed-by=/etc/apt/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/debian ${DEBIAN_VERSION} nginx\n" > /etc/apt/sources.list.d/nginx.list; \
-    printf "Package: *\nPin: origin nginx.org\nPin: release o=nginx\nPin-Priority: 900\n" > /etc/apt/preferences.d/99nginx; \
-    apt-get update; \
-    apt-get install --no-install-recommends -y nginx; \
-    apt-get autoremove -y
-
-RUN set -eux; \
-    mkdir -p $LS_DIR $LABEL_STUDIO_BASE_DATA_DIR $OPT_DIR && \
-    chown -R 1001:0 $LS_DIR $LABEL_STUDIO_BASE_DATA_DIR $OPT_DIR /var/log/nginx /etc/nginx
-
-COPY --chown=1001:0 deploy/default.conf /etc/nginx/nginx.conf
 
 # Copy essential files for installing Label Studio and its dependencies
 COPY --chown=1001:0 pyproject.toml .
