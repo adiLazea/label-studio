@@ -4,7 +4,6 @@ ARG PYTHON_VERSION=3.12
 ARG POETRY_VERSION=2.1.2
 ARG VERSION_OVERRIDE
 ARG BRANCH_OVERRIDE
-ARG SKIP_VERSION_GEN=false
 
 ################################ Overview
 
@@ -32,8 +31,8 @@ WORKDIR /label-studio/web
 RUN yarn config set registry https://registry.npmjs.org/
 RUN yarn config set network-timeout 1200000 # HTTP timeout used when downloading packages, set to 20 minutes
 
-COPY web/package.json . 
-COPY web/yarn.lock . 
+COPY web/package.json .
+COPY web/yarn.lock .
 COPY web/tools tools
 RUN --mount=type=cache,target=${YARN_CACHE_FOLDER},sharing=locked \
     --mount=type=cache,target=${NX_CACHE_DIRECTORY},sharing=locked \
@@ -47,15 +46,10 @@ RUN --mount=type=cache,target=${YARN_CACHE_FOLDER},sharing=locked \
 
 ################################ Stage: frontend-version-generator
 FROM frontend-builder AS frontend-version-generator
-ARG SKIP_VERSION_GEN=false
-
-# ✅ Updated to avoid crash if .git is missing (for remote builds)
-RUN if [ "$SKIP_VERSION_GEN" != "true" ] && [ -d "../.git" ]; then \
-      echo "Running frontend version generator..."; \
-      yarn version:libs; \
-    else \
-      echo "Skipping frontend version generation (SKIP_VERSION_GEN=$SKIP_VERSION_GEN or .git missing)"; \
-    fi
+RUN --mount=type=cache,target=${YARN_CACHE_FOLDER},sharing=locked \
+    --mount=type=cache,target=${NX_CACHE_DIRECTORY},sharing=locked \
+    --mount=type=bind,source=.git,target=../.git \
+    yarn version:libs
 
 ################################ Stage: venv-builder (prepare the virtualenv)
 FROM python:${PYTHON_VERSION}-slim AS venv-builder
@@ -108,24 +102,18 @@ RUN --mount=type=cache,target=$POETRY_CACHE_DIR,sharing=locked \
 # Install LS
 COPY label_studio label_studio
 RUN --mount=type=cache,target=$POETRY_CACHE_DIR,sharing=locked \
+    # `--extras uwsgi` is mandatory here due to poetry bug: https://github.com/python-poetry/poetry/issues/7302
     poetry install --only-root --extras uwsgi && \
     python3 label_studio/manage.py collectstatic --no-input
 
 ################################ Stage: py-version-generator
 FROM venv-builder AS py-version-generator
-ARG SKIP_VERSION_GEN=false
 ARG VERSION_OVERRIDE
 ARG BRANCH_OVERRIDE
 
-# ✅ Updated to create a dummy fallback if version generation is skipped or .git is missing
-RUN if [ "$SKIP_VERSION_GEN" != "true" ] && [ -d "./.git" ]; then \
-      echo "Running Python version generator..."; \
-      VERSION_OVERRIDE=${VERSION_OVERRIDE} BRANCH_OVERRIDE=${BRANCH_OVERRIDE} \
-      poetry run python label_studio/core/version.py; \
-    else \
-      echo "Skipping Python version generation, creating fallback..."; \
-      echo '__version__ = "dev"\n__branch__ = "unknown"\n__hash__ = "none"\n' > label_studio/core/version_.py; \
-    fi
+# Create version_.py and ls-version_.py
+RUN --mount=type=bind,source=.git,target=./.git \
+    VERSION_OVERRIDE=${VERSION_OVERRIDE} BRANCH_OVERRIDE=${BRANCH_OVERRIDE} poetry run python label_studio/core/version.py
 
 ################################### Stage: prod
 FROM python:${PYTHON_VERSION}-slim AS production
@@ -155,9 +143,9 @@ RUN --mount=type=cache,target="/var/cache/apt",sharing=locked \
     apt-get autoremove -y
 
 # Copy essential files for installing Label Studio and its dependencies
-COPY --chown=1001:0 pyproject.toml . 
-COPY --chown=1001:0 poetry.lock . 
-COPY --chown=1001:0 README.md . 
+COPY --chown=1001:0 pyproject.toml .
+COPY --chown=1001:0 poetry.lock .
+COPY --chown=1001:0 README.md .
 COPY --chown=1001:0 LICENSE LICENSE
 COPY --chown=1001:0 licenses licenses
 COPY --chown=1001:0 deploy deploy
